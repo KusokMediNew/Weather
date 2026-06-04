@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Погода 24 Часа</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Светлая тема */
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #111827;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+            --hover-bg: #f9fafb;
+            --shadow: 0 10px 40px -10px rgba(0,0,0,0.08);
+            --chart-axis: #e5e7eb;
+            --input-bg: #f3f4f6;
+            --accent-color: #3b82f6;
+        }
+
+        .dark-theme {
+            /* Тёмная тема */
+            --bg-color: #111827;
+            --card-bg: #1f2937;
+            --text-main: #f9fafb;
+            --text-secondary: #9ca3af;
+            --border-color: #374151;
+            --hover-bg: #374151;
+            --shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
+            --chart-axis: #4b5563;
+            --input-bg: #111827;
+            --accent-color: #60a5fa;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 16px;
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+
+        .weather-card {
+            background-color: var(--card-bg);
+            border-radius: 32px;
+            box-shadow: var(--shadow);
+            width: 100%;
+            max-width: 800px;
+            overflow: hidden;
+            transition: background-color 0.4s ease, box-shadow 0.4s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .text-main { color: var(--text-main); }
+        .text-secondary { color: var(--text-secondary); }
+        
+        .icon-btn {
+            color: var(--text-main);
+            background-color: var(--input-bg);
+            padding: 10px;
+            border-radius: 50%;
+            transition: transform 0.2s, background-color 0.2s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon-btn:hover {
+            transform: scale(1.05);
+            background-color: var(--hover-bg);
+        }
+        .icon-btn:active { transform: scale(0.95); }
+
+        .search-container {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .search-container:focus-within {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .tab-btn {
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            position: relative;
+        }
+        .tab-btn:hover { color: var(--text-main); }
+        .tab-btn.active-temp { color: var(--text-main); border-bottom-color: #f59e0b; }
+        .tab-btn.active-rain { color: var(--text-main); border-bottom-color: #3b82f6; }
+        .tab-btn.active-wind { color: var(--text-main); border-bottom-color: #10b981; }
+
+        .scrollable-x {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
+            padding-bottom: 8px;
+        }
+        .scrollable-x::-webkit-scrollbar { height: 6px; }
+        .scrollable-x::-webkit-scrollbar-track { background: transparent; }
+        .scrollable-x::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 10px; }
+        .scrollable-x::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
+
+        .chart-container { width: 100%; position: relative; }
+        svg { display: block; }
+        .temp-text { font-weight: 600; font-size: 14px; fill: var(--text-main); text-anchor: middle; }
+        .time-text { font-size: 13px; font-weight: 500; fill: var(--text-secondary); text-anchor: middle; }
+        .axis-line { stroke: var(--chart-axis); stroke-width: 1.5; }
+
+        .loader {
+            border: 3px solid var(--border-color);
+            border-top: 3px solid var(--accent-color);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .search-panel-wrapper {
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-15px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            max-height: 0;
+            margin-bottom: 0;
+            overflow: visible;
+        }
+        .search-panel-active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            max-height: 200px;
+            margin-bottom: 2rem;
+            z-index: 40;
+        }
+
+        .content-transition {
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .content-hidden {
+            opacity: 0;
+            transform: translateY(15px);
+        }
+
+        /* Подсказки и анимации */
+        .suggestions-list {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            width: 100%;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            z-index: 50;
+            max-height: 250px;
+            overflow-y: auto;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .suggestions-list.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .suggestion-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            flex-direction: column;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .suggestion-item:last-child { border-bottom: none; }
+        .suggestion-item:hover { background-color: var(--hover-bg); }
+        .suggestion-name { color: var(--text-main); font-weight: 500; font-size: 15px; }
+        .suggestion-country { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
+
+        .animate-draw {
+            stroke-dasharray: 3000;
+            stroke-dashoffset: 3000;
+            animation: drawLine 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        @keyframes drawLine { to { stroke-dashoffset: 0; } }
+        
+        .animate-fade-up { animation: fadeUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="weather-card p-6 sm:p-10 relative">
+    
+    <!-- Индикатор загрузки -->
+    <div id="loader" class="absolute inset-0 bg-[var(--card-bg)] bg-opacity-90 z-20 flex flex-col justify-center items-center backdrop-blur-sm" style="display: none;">
+        <div class="loader mb-4"></div>
+        <div class="text-secondary font-medium">Обновление данных...</div>
+    </div>
+
+    <div class="flex justify-between items-center mb-8">
+        <h1 id="city-title" class="text-3xl sm:text-4xl font-bold text-main truncate mr-4 tracking-tight">Огре</h1>
+        <div class="flex gap-3 shrink-0">
+            <button onclick="toggleSearch()" class="icon-btn shadow-sm" title="Поиск города">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </button>
+            <button onclick="toggleTheme()" class="icon-btn shadow-sm" title="Сменить тему" id="theme-icon">
+                <!-- Иконка темы (меняется скриптом) -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <div id="search-panel" class="search-panel-wrapper relative">
+        <div class="search-container flex items-center p-1.5 pl-4">
+            <svg class="text-secondary shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" id="city-input" class="flex-1 bg-transparent border-none outline-none text-main px-3 py-2 text-base w-full placeholder-gray-400" placeholder="Найти другой город..." oninput="handleInput()" onkeypress="handleSearch(event)" autocomplete="off">
+            <button onclick="searchCity()" class="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-2xl font-medium transition-colors text-sm shrink-0 shadow-sm">Найти</button>
+        </div>
+        <p id="search-error" class="text-red-500 text-sm mt-2 ml-4 hidden font-medium">Город не найден. Проверьте название.</p>
+        
+        <!-- Выпадающий список подсказок -->
+        <ul id="suggestions" class="suggestions-list"></ul>
+    </div>
+
+    <div id="main-content" class="content-transition">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6 animate-fade-up" style="animation-delay: 0.1s;">
+            <div class="flex items-center gap-6">
+                <div id="current-icon" class="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-md">
+                    <!-- SVG Icon -->
+                </div>
+                <div>
+                    <div class="flex items-start">
+                        <span id="current-temp" class="text-7xl sm:text-8xl font-bold tracking-tighter text-main">--</span>
+                        <span class="text-main font-semibold text-2xl sm:text-3xl mt-2 ml-1">°C</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-left sm:text-right w-full sm:w-auto">
+                <p id="current-time" class="text-secondary text-base font-medium mb-1 capitalize">загрузка...</p>
+                <p id="current-desc" class="text-main text-xl font-bold mb-4">--</p>
+                
+                <div class="flex flex-col gap-1.5 text-sm sm:text-base text-secondary font-medium">
+                    <p>Вероятность осадков: <span id="current-precip" class="text-main font-bold">--%</span></p>
+                    <p>Влажность: <span id="current-humidity" class="text-main font-bold">--%</span></p>
+                    <p>Ветер: <span id="current-wind" class="text-main font-bold">-- км/ч</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="scrollable-x mb-4 border-b border-theme animate-fade-up" style="animation-delay: 0.2s;">
+            <div class="flex gap-2 sm:gap-6 w-max px-2">
+                <button onclick="switchTab('temp')" id="tab-temp" class="tab-btn active-temp pb-3 px-2 text-base font-semibold focus:outline-none">Температура</button>
+                <button onclick="switchTab('rain')" id="tab-rain" class="tab-btn pb-3 px-2 text-base font-semibold focus:outline-none">Осадки</button>
+                <button onclick="switchTab('wind')" id="tab-wind" class="tab-btn pb-3 px-2 text-base font-semibold focus:outline-none">Ветер</button>
+            </div>
+        </div>
+
+        <div class="scrollable-x relative animate-fade-up" style="animation-delay: 0.3s;">
+            <div class="chart-container" id="chart-scroll">
+                <svg id="weather-chart" height="180">
+                    <defs id="chart-defs">
+                        <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.0"/>
+                    </linearGradient>
+                    <linearGradient id="fill-rain" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0"/>
+                    </linearGradient>
+                    <linearGradient id="fill-wind" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
+                    </linearGradient>
+                </defs>
+                
+                <!-- Заливка, Линия и Точки -->
+                <polygon id="chart-fill" points="" fill="url(#fill-temp)" />
+                <polyline id="chart-line" points="" fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+                <g id="chart-points"></g>
+                <g id="chart-labels"></g>
+                <g id="chart-times"></g>
+                
+                <!-- Базовая линия (ось X) -->
+                <line id="chart-axis" x1="0" y1="145" x2="1000" y2="145" class="axis-line" />
+            </svg>
+        </div>
+    </div>
+    </div>
+
+</div>
+
+<script>
+    // Текущее состояние
+    let state = {
+        lat: 56.8167,
+        lon: 24.6167,
+        cityName: 'Огре',
+        data: null,
+        tab: 'temp',
+        isDark: false
+    };
+
+    let searchTimeout = null;
+
+    // SVG Иконки для погоды
+    const getIcon = (code, isDay = true) => {
+        const cloudColor = state.isDark ? '#e5e7eb' : '#9ca3af'; 
+        const sun = `<svg viewBox="0 0 24 24" fill="#f59e0b"><circle cx="12" cy="12" r="5"/><path d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42m12.72-12.72l1.42-1.42" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+        const moon = `<svg viewBox="0 0 24 24" fill="#9ca3af"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        const cloud = `<svg viewBox="0 0 24 24" fill="${cloudColor}"><path d="M17.5 19C19.9853 19 22 16.9853 22 14.5C22 12.1325 20.1772 10.2036 17.8596 10.0163C17.3719 6.61361 14.4449 4 11 4C7.13401 4 4 7.13401 4 11C4 11.2334 4.01142 11.464 4.03362 11.6908C2.29851 12.3552 1 14.0256 1 16C1 18.7614 3.23858 21 6 21H17.5Z"/></svg>`;
+        const rain = `<svg viewBox="0 0 24 24" fill="#3b82f6"><path d="M17.5 16C19.9853 16 22 13.9853 22 11.5C22 9.13247 20.1772 7.20364 17.8596 7.01625C17.3719 3.61361 14.4449 1 11 1C7.13401 1 4 4.13401 4 8C4 8.23337 4.01142 8.46399 4.03362 8.69076C2.29851 9.35515 1 11.0256 1 13C1 15.7614 3.23858 18 6 18H17.5Z"/><path d="M8 20L7 23M12 20L11 23M16 20L15 23" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/></svg>`;
+        const snow = `<svg viewBox="0 0 24 24" fill="#60a5fa"><path d="M17.5 16C19.9853 16 22 13.9853 22 11.5C22 9.13247 20.1772 7.20364 17.8596 7.01625C17.3719 3.61361 14.4449 1 11 1C7.13401 1 4 4.13401 4 8C4 8.23337 4.01142 8.46399 4.03362 8.69076C2.29851 9.35515 1 11.0256 1 13C1 15.7614 3.23858 18 6 18H17.5Z"/><path d="M8 20L8 23M12 20L12 23M16 20L16 23M7 21.5L9 21.5M11 21.5L13 21.5M15 21.5L17 21.5" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/></svg>`;
+        
+        const baseIcon = isDay ? sun : moon;
+
+        const wmoCodes = {
+            0: { desc: isDay ? 'Ясно' : 'Ясная ночь', icon: baseIcon },
+            1: { desc: 'Преимущественно ясно', icon: baseIcon },
+            2: { desc: 'Переменная облачность', icon: cloud },
+            3: { desc: 'Пасмурно', icon: cloud },
+            45: { desc: 'Туман', icon: cloud },
+            48: { desc: 'Изморозь', icon: cloud },
+            51: { desc: 'Морось', icon: rain },
+            61: { desc: 'Слабый дождь', icon: rain },
+            63: { desc: 'Дождь', icon: rain },
+            65: { desc: 'Сильный дождь', icon: rain },
+            71: { desc: 'Слабый снег', icon: snow },
+            73: { desc: 'Снег', icon: snow },
+            75: { desc: 'Снегопад', icon: snow },
+            95: { desc: 'Гроза', icon: rain },
+        };
+        return wmoCodes[code] || { desc: 'Облачно', icon: cloud };
+    };
+
+    async function fetchWeather() {
+        document.getElementById('loader').style.display = 'flex';
+        try {
+            // Запрашиваем данные на 2 дня, чтобы точно хватило на 24 часа текущего дня в нужной таймзоне
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day&hourly=temperature_2m,precipitation_probability,wind_speed_10m,weather_code&timezone=auto&forecast_days=2`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('API Error');
+            state.data = await res.json();
+            updateUI();
+        } catch (error) {
+            console.error("Используем демо-данные (блокировка CORS или сети)", error);
+            generateMockData();
+            updateUI();
+        } finally {
+            document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    function generateMockData() {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const mockTime = Array.from({length: 48}, (_, i) => { let d = new Date(start); d.setHours(i); return d.toISOString(); });
+        
+        state.data = {
+            current: { temperature_2m: 23, relative_humidity_2m: 44, weather_code: 3, wind_speed_10m: 21, is_day: 1 },
+            hourly: {
+                time: mockTime,
+                temperature_2m: Array(48).fill(0).map((_,i) => [18,17,16,16,15,15,16,17,19,21,23,24,24,24,24,23,23,22,21,20,19,18,17,17][i%24]),
+                precipitation_probability: Array(48).fill(0).map((_,i) => [10,10,15,20,30,40,50,60,50,40,30,20,10,10,10,10,10,15,20,30,40,50,60,50][i%24]),
+                wind_speed_10m: Array(48).fill(0).map((_,i) => [10,12,15,18,20,22,24,21,22,20,18,15,12,10,8,10,12,15,18,20,22,24,21,22][i%24])
+            }
+        };
+    }
+
+    function toggleSearch() {
+        const panel = document.getElementById('search-panel');
+        const input = document.getElementById('city-input');
+        if (!panel.classList.contains('search-panel-active')) {
+            panel.classList.add('search-panel-active');
+            input.focus();
+        } else {
+            panel.classList.remove('search-panel-active');
+            document.getElementById('search-error').classList.add('hidden');
+            document.getElementById('suggestions').classList.remove('show');
+            input.value = '';
+        }
+    }
+
+    async function handleInput() {
+        const input = document.getElementById('city-input').value.trim();
+        const suggestionsList = document.getElementById('suggestions');
+        
+        if (searchTimeout) clearTimeout(searchTimeout);
+        
+        if (!input || input.length < 2) {
+            suggestionsList.classList.remove('show');
+            return;
+        }
+
+        // Задержка перед запросом, чтобы не спамить API (Debounce)
+        searchTimeout = setTimeout(async () => {
+            try {
+                const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input)}&count=5&language=ru&format=json`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.results && data.results.length > 0) {
+                    showSuggestions(data.results);
+                } else {
+                    suggestionsList.classList.remove('show');
+                }
+            } catch (e) {
+                console.error("Ошибка автодополнения", e);
+            }
+        }, 300);
+    }
+
+    function showSuggestions(results) {
+        const suggestionsList = document.getElementById('suggestions');
+        suggestionsList.innerHTML = '';
+        
+        results.forEach(city => {
+            const li = document.createElement('li');
+            li.className = 'suggestion-item';
+            
+            const adminArea = city.admin1 ? `${city.admin1}, ` : '';
+            const country = city.country || '';
+            
+            li.innerHTML = `
+                <span class="suggestion-name">${city.name}</span>
+                <span class="suggestion-country">${adminArea}${country}</span>
+            `;
+            
+            li.onclick = () => selectCity(city);
+            suggestionsList.appendChild(li);
+        });
+        
+        suggestionsList.classList.add('show');
+    }
+
+    async function selectCity(city) {
+        state.lat = city.latitude;
+        state.lon = city.longitude;
+        state.cityName = city.name;
+        
+        toggleSearch(); // Закрываем панель
+        await fetchWeather();
+    }
+
+    function handleSearch(e) {
+        if (e.key === 'Enter') searchCity();
+    }
+
+    async function searchCity() {
+        const input = document.getElementById('city-input').value.trim();
+        if (!input) return;
+
+        const errorEl = document.getElementById('search-error');
+        errorEl.classList.add('hidden');
+        document.getElementById('loader').style.display = 'flex';
+
+        try {
+            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input)}&count=1&language=ru&format=json`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (data.results && data.results.length > 0) {
+                const city = data.results[0];
+                state.lat = city.latitude;
+                state.lon = city.longitude;
+                state.cityName = city.name;
+                
+                toggleSearch(); // Скрыть панель
+                document.getElementById('city-input').value = '';
+                await fetchWeather();
+            } else {
+                errorEl.classList.remove('hidden');
+                document.getElementById('loader').style.display = 'none';
+            }
+        } catch (e) {
+            errorEl.innerText = "Ошибка сети при поиске.";
+            errorEl.classList.remove('hidden');
+            document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    function updateUI() {
+        const cur = state.data.current;
+        const info = getIcon(cur.weather_code, cur.is_day);
+        const contentBlock = document.getElementById('main-content');
+
+        // Плавное скрытие контента
+        if (contentBlock) contentBlock.classList.add('content-hidden');
+
+        setTimeout(() => {
+            document.getElementById('city-title').innerText = state.cityName;
+            document.getElementById('current-temp').innerText = Math.round(cur.temperature_2m);
+            document.getElementById('current-icon').innerHTML = info.icon;
+            document.getElementById('current-desc').innerText = info.desc;
+            document.getElementById('current-humidity').innerText = cur.relative_humidity_2m + '%';
+            document.getElementById('current-wind').innerText = Math.round(cur.wind_speed_10m) + ' км/ч';
+
+            const now = new Date();
+            const currentHour = now.getHours();
+            const precipProb = state.data.hourly.precipitation_probability[currentHour] || 0;
+            document.getElementById('current-precip').innerText = precipProb + '%';
+
+            const days = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+            document.getElementById('current-time').innerText = `${days[now.getDay()]}, ${currentHour.toString().padStart(2, '0')}:00`;
+
+            drawChart(state.tab);
+
+            // Плавное появление контента с новыми данными
+            if (contentBlock) contentBlock.classList.remove('content-hidden');
+        }, 200); // Задержка, чтобы анимация скрытия успела отработать
+    }
+
+    window.switchTab = function(tab) {
+        state.tab = tab;
+        ['temp', 'rain', 'wind'].forEach(t => {
+            document.getElementById(`tab-${t}`).className = `tab-btn pb-3 px-2 text-base font-semibold focus:outline-none`;
+        });
+        document.getElementById(`tab-${tab}`).classList.add(`active-${tab}`);
+        drawChart(tab);
+    }
+
+    function drawChart(type) {
+        if (!state.data) return;
+        
+        const pointCount = 24; // Строго 24 часа
+        const stepX = 65; // Расстояние между часами
+        const totalWidth = (pointCount - 1) * stepX + 40; // Ширина SVG
+        
+        let chartData = [];
+        let labels = [];
+        let times = [];
+
+        // Берем индексы с 0 по 23 (это часы с 00:00 до 23:00 текущего дня)
+        for (let i = 0; i < pointCount; i++) {
+            let index = i; 
+            
+            let rawTime = new Date(state.data.hourly.time[index]);
+            let timeStr = `${rawTime.getHours().toString().padStart(2, '0')}:00`;
+            
+            let val;
+            if (type === 'temp') val = Math.round(state.data.hourly.temperature_2m[index]);
+            if (type === 'rain') val = Math.round(state.data.hourly.precipitation_probability[index]);
+            if (type === 'wind') val = Math.round(state.data.hourly.wind_speed_10m[index]);
+
+            chartData.push(val);
+            labels.push(val + (type === 'rain' ? '%' : (type==='wind' ? ' км/ч' : '°')));
+            times.push(timeStr);
+        }
+
+        const height = 180; 
+        const padTop = 35; // Отступ сверху для текста
+        const padBot = 45; // Отступ снизу для времени
+        const axisY = height - padBot + 10; // Позиция базовой линии
+        const gHeight = height - padTop - padBot;
+
+        // Настройка ширины SVG
+        const svg = document.getElementById('weather-chart');
+        svg.setAttribute('viewBox', `0 0 ${totalWidth} ${height}`);
+        svg.style.width = `${totalWidth}px`;
+        
+        document.getElementById('chart-axis').setAttribute('x2', totalWidth);
+        document.getElementById('chart-axis').setAttribute('y1', axisY);
+        document.getElementById('chart-axis').setAttribute('y2', axisY);
+
+        let minVal = Math.min(...chartData);
+        let maxVal = Math.max(...chartData);
+        if (minVal === maxVal) { minVal -= 5; maxVal += 5; }
+        if (type === 'rain') { minVal = 0; maxVal = 100; }
+
+        const range = maxVal - minVal;
+
+        let pointsPath = [];
+        let pointsHTML = '';
+        let labelsHTML = '';
+        let timesHTML = '';
+
+        let strokeColor = '#f59e0b'; 
+        let fillColorId = 'url(#fill-temp)';
+        let pointBg = state.isDark ? '#1f2937' : '#ffffff';
+
+        if (type === 'rain') { strokeColor = '#3b82f6'; fillColorId = 'url(#fill-rain)'; }
+        if (type === 'wind') { strokeColor = '#10b981'; fillColorId = 'url(#fill-wind)'; }
+
+        chartData.forEach((val, i) => {
+            const x = 20 + i * stepX;
+            const y = padTop + gHeight - ((val - minVal) / range) * gHeight;
+            
+            pointsPath.push(`${x},${y}`);
+            
+            // Кружок
+            pointsHTML += `<circle cx="${x}" cy="${y}" r="4.5" fill="${pointBg}" stroke="${strokeColor}" stroke-width="3" class="transition-all duration-300"/>`;
+            
+            // Значение над точкой
+            labelsHTML += `<text x="${x}" y="${y - 14}" class="temp-text">${labels[i]}</text>`;
+            
+            // Время внизу
+            timesHTML += `<text x="${x}" y="${axisY + 22}" class="time-text">${times[i]}</text>`;
+        });
+
+        // Замыкаем заливку от первой до последней точки вниз к оси
+        const fillPath = `20,${axisY} ${pointsPath.join(' ')} ${20 + (pointCount - 1) * stepX},${axisY}`;
+
+        const chartLine = document.getElementById('chart-line');
+        
+        // Перезапуск анимации отрисовки линии
+        chartLine.classList.remove('animate-draw');
+        void chartLine.offsetWidth; // Хак для перезапуска анимации (trigger reflow)
+        chartLine.classList.add('animate-draw');
+
+        chartLine.setAttribute('points', pointsPath.join(' '));
+        chartLine.setAttribute('stroke', strokeColor);
+        
+        document.getElementById('chart-fill').setAttribute('points', fillPath);
+        document.getElementById('chart-fill').setAttribute('fill', fillColorId);
+        
+        document.getElementById('chart-points').innerHTML = pointsHTML;
+        document.getElementById('chart-labels').innerHTML = labelsHTML;
+        document.getElementById('chart-times').innerHTML = timesHTML;
+    }
+
+    function toggleTheme() {
+        state.isDark = !state.isDark;
+        const iconBtn = document.getElementById('theme-icon');
+        
+        if (state.isDark) {
+            document.body.classList.add('dark-theme');
+            // Иконка Солнца для перехода на светлую
+            iconBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+            localStorage.setItem('weather-theme', 'dark');
+        } else {
+            document.body.classList.remove('dark-theme');
+            // Иконка Луны для перехода на темную
+            iconBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+            localStorage.setItem('weather-theme', 'light');
+        }
+        
+        if(state.data) updateUI();
+    }
+
+    // Восстановление темы из памяти или использование системной
+    const savedTheme = localStorage.getItem('weather-theme');
+    if (savedTheme === 'dark') {
+        state.isDark = false; 
+        toggleTheme();
+    } else if (savedTheme === 'light') {
+        state.isDark = true;
+        toggleTheme();
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        toggleTheme(); 
+    }
+
+    // Инициализация
+    fetchWeather();
+
+    // Закрытие подсказок при клике вне поля
+    document.addEventListener('click', (e) => {
+        const panel = document.getElementById('search-panel');
+        const suggestions = document.getElementById('suggestions');
+        if (panel && !panel.contains(e.target)) {
+            suggestions.classList.remove('show');
+        }
+    });
+
+</script>
+</body>
+</html>
